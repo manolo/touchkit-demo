@@ -44,7 +44,6 @@ public class OfflineModeConnector extends AbstractExtensionConnector implements
 
     public OfflineModeConnector() {
         super();
-        new RuntimeException().printStackTrace();
         registerRpc(OfflineModeClientRpc.class, new OfflineModeClientRpc() {
             @Override
             public void goOffline() {
@@ -64,7 +63,6 @@ public class OfflineModeConnector extends AbstractExtensionConnector implements
 
     @Override
     protected void init() {
-        new RuntimeException().printStackTrace();
         offlineEntrypoint = OfflineModeEntrypoint.get();
         offlineEntrypoint.setOfflineModeConnector(this);
         offlineTimeoutMillis = getState().offlineModeTimeout * 1000;
@@ -140,7 +138,7 @@ public class OfflineModeConnector extends AbstractExtensionConnector implements
     private String getSessionCookie() {
         return Cookies.getCookie(SESSION_COOKIE);
     }
-    
+
     public int getOfflineModeTimeout() {
         return offlineTimeoutMillis;
     }

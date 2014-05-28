@@ -47,8 +47,6 @@ import com.vaadin.client.ApplicationConnection.ResponseHandlingStartedEvent;
 public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
         CommunicationErrorHandler, ConnectionStatusHandler, RequestCallback {
 
-    private static final String TK_OFFLINE = "TkOffline";
-
     private static OfflineModeEntrypoint instance = null;
     private static OfflineMode offlineModeApp = GWT.create(OfflineMode.class);
     private static boolean online = true;
@@ -141,7 +139,6 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
     public void dispatch(ActivationReason reason) {
         logger.info("Dispatching: " + lastReason + " -> " + reason);
         if (lastReason != reason) {
-            lastReason = reason;
             if (reason == NETWORK_ONLINE) {
                 if (!networkOnline) {
                     networkOnline = true;
@@ -152,7 +149,7 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
                 networkOnline = true;
             } else if (reason == NO_NETWORK) {
                 networkOnline = false;
-                if (serverAvailable) {
+                if (serverAvailable || lastReason == APP_STARTING) {
                     goOffline(reason);
                 }
             } else if (reason == SERVER_AVAILABLE) {
@@ -218,10 +215,10 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
      */
     private void goOnline(ActivationReason reason) {
         if (!online && networkOnline && serverAvailable && !forcedOffline) {
+            lastReason = reason;
             logger.info("Network Back ONLINE (" + reason + ")");
             online = true;
             if (offlineModeConnector != null) {
-                lastReason = reason;
                 if (offlineModeApp.isActive()) {
                     offlineModeApp.deactivate();
                 }
@@ -243,6 +240,7 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
     private void goOffline(ActivationReason reason) {
         logger.info("Network OFFLINE (" + reason + ")");
         online = false;
+        lastReason = reason;
         offlineModeApp.activate(reason);
         if (offlineModeConnector != null) {
             applicationConnection.setApplicationRunning(false);

@@ -114,7 +114,7 @@ public class DefaultOfflineMode implements OfflineMode {
 
     protected void buildLoadingContent() {
         getPanel().clear();
-        HTML h = new HTML("<h1>Loading ...</h1>");
+        HTML h = new HTML("<h1>Loading UI ...</h1>");
         h.setStyleName("v-touchkit-offlinemode-panel");
         getPanel().add(h);
     }

@@ -66,6 +66,26 @@ public interface OfflineMode {
     }
 
     /**
+     * Holds the reason for why the offline mode was activated. Passed to the
+     * {@link #activate(ActivationEvent)} method.
+     */
+    @Deprecated
+    public interface ActivationEvent {
+
+        /**
+         * @return A human readable message telling why the offline mode was
+         *         activated.
+         */
+        String getActivationMessage();
+
+        /**
+         * @return the ActivationReason code for why the offline mode was
+         *         activated.
+         */
+        ActivationReason getActivationReason();
+    }
+
+    /**
      * Event triggered when the application goes online
      */
     public static class OnlineEvent extends GwtEvent<OnlineEvent.OnlineHandler> {
