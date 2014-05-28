@@ -373,7 +373,7 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
           }
         }
 
-        // Redefine HTML-5 onLine indicator.
+        // Redefine the HTML-5 onLine indicator.
         // This fixes the issue of android inside phonegap returning erroneus values.
         // It allows old vaadin apps based on testing 'onLine' flag continuing working.
         Object.defineProperty($wnd.navigator, 'onLine', {
