@@ -4,12 +4,10 @@ import com.google.gwt.core.client.GWT;
 import com.google.gwt.dom.client.Style.Unit;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
-import com.google.gwt.user.client.Window;
 import com.google.gwt.user.client.Window.Location;
 import com.google.gwt.user.client.ui.FlowPanel;
 import com.google.gwt.user.client.ui.HTML;
 import com.google.gwt.user.client.ui.Panel;
-import com.vaadin.client.ApplicationConfiguration;
 import com.vaadin.client.ui.VNativeButton;
 import com.vaadin.client.ui.VOverlay;
 
@@ -31,7 +29,7 @@ public class DefaultOfflineMode implements OfflineMode {
     private VOverlay overlay;
     private boolean active;
     private OfflineModeMessages msg;
-    private ActivationEvent activationEvent;
+    private ActivationReason activationEvent;
 
     public DefaultOfflineMode() {
         active = false;
@@ -69,10 +67,16 @@ public class DefaultOfflineMode implements OfflineMode {
     };
 
     @Override
-    public void activate(ActivationEvent event) {
+    public void activate(ActivationReason event) {
         active = true;
         activationEvent = event;
-        buildDefaultContent();
+        if (event == ActivationReason.APP_STARTING) {
+            buildLoadingContent();
+        } else if (event == ActivationReason.ONLINE_APP_NOT_STARTED) {
+            buildReloadContent();
+        } else {
+            buildDefaultContent();
+        }
         overlay.show();
     }
 
@@ -88,7 +92,7 @@ public class DefaultOfflineMode implements OfflineMode {
      *         {@link #activate(ActivationEvent)} method.
      */
     public String getActivationMessage() {
-        return activationEvent.getActivationMessage();
+        return activationEvent.getMessage();
     }
 
     /**
@@ -99,18 +103,18 @@ public class DefaultOfflineMode implements OfflineMode {
      * {@link #getPanel()} method.
      */
     protected void buildDefaultContent() {
-        String html;
-        if (activationEvent.getActivationReason() == ActivationReason.APP_STARTING) {
-            html = "<h1>Loading ...</h1>";
-        } else {
-            html = "<div class=\"v-touchkit-sadface\">:-(</div><h1>"
-                    + msg.serverCannotBeReachedMsg() + "</h1><p>"
-                    + getActivationMessage() + "</p><div>"
-                    + msg.offlineDueToNetworkMsg() + "</div>";
-        }
-
         getPanel().clear();
-        HTML h = new HTML(html);
+        HTML h = new HTML("<div class=\"v-touchkit-sadface\">:-(</div><h1>"
+                + msg.serverCannotBeReachedMsg() + "</h1><p>"
+                + getActivationMessage() + "</p><div>"
+                + msg.offlineDueToNetworkMsg() + "</div>");
+        h.setStyleName("v-touchkit-offlinemode-panel");
+        getPanel().add(h);
+    }
+
+    protected void buildLoadingContent() {
+        getPanel().clear();
+        HTML h = new HTML("<h1>Loading ...</h1>");
         h.setStyleName("v-touchkit-offlinemode-panel");
         getPanel().add(h);
     }
@@ -119,7 +123,7 @@ public class DefaultOfflineMode implements OfflineMode {
      * This method is called by the default {@link #deactivate()}
      * implementation to build the contents of this overlay when the
      * device goes online and the online app was not loaded previously.
-     * 
+     *
      * The simplest method to customize this view mode is to override
      * this method and add a custom app to the panel returned by the
      * {@link #getPanel()} method.
@@ -150,15 +154,8 @@ public class DefaultOfflineMode implements OfflineMode {
     @Override
     public boolean deactivate() {
         active = false;
-        if (ApplicationConfiguration.getRunningApplications().isEmpty()) {
-            // If online app was never loaded, we ask the user
-
-            // to reload the app.
-            buildReloadContent();
-        } else {
-            // Hide the floating overlay
-            overlay.hide();
-        }
+        // Hide the floating overlay
+        overlay.hide();
         return true;
     }
 }

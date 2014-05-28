@@ -1,10 +1,18 @@
 package com.vaadin.addon.touchkit.gwt.client.vcom;
 
+import static com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.ActivationReason.RESPONSE_TIMEOUT;
+import static com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.ActivationReason.FORCE_OFFLINE;
+import static com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.ActivationReason.FORCE_ONLINE;
+
 import java.util.Date;
 
 import com.google.gwt.user.client.Cookies;
 import com.google.gwt.user.client.Timer;
 import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode;
+import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.OfflineEvent;
+import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.OfflineEvent.OfflineHandler;
+import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.OnlineEvent;
+import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.OnlineEvent.OnlineHandler;
 import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineModeEntrypoint;
 import com.vaadin.client.ApplicationConnection.CommunicationHandler;
 import com.vaadin.client.ApplicationConnection.RequestStartingEvent;
@@ -18,58 +26,35 @@ import com.vaadin.shared.ui.Connect;
 @SuppressWarnings("serial")
 @Connect(com.vaadin.addon.touchkit.extensions.OfflineMode.class)
 public class OfflineModeConnector extends AbstractExtensionConnector implements
-        CommunicationHandler {
-
-    private int offlineModeTimeout = 30;
+        CommunicationHandler, OfflineHandler, OnlineHandler {
 
     private static final String SESSION_COOKIE = "JSESSIONID";
-    private boolean persistenCookieSet;
-    boolean applicationStarted = false;
-    private static OfflineModeEntrypoint offlineEntrypoint;
 
     private Timer requestTimeoutTracker = new Timer() {
         @Override
         public void run() {
-            offlineEntrypoint.goOffline(OfflineMode.BAD_RESPONSE);
+            offlineEntrypoint.dispatch(RESPONSE_TIMEOUT);
         }
-        public void cancel() {
-            super.cancel();
-        };
     };
 
-    @Override
-    protected void extend(ServerConnector target) {
-        offlineEntrypoint = OfflineModeEntrypoint.get();
+    private int offlineTimeoutMillis;
+    private boolean applicationStarted = false;
+    private boolean persistenCookieSet;
+    private static OfflineModeEntrypoint offlineEntrypoint;
 
-        // Shoulden't happen unless someone does not inherits TK module
-        if (offlineEntrypoint != null) {
-            offlineEntrypoint.setOfflineModeConnector(this);
-
-            // Intercept server requests to setup a timeout
-            getConnection().addHandler(RequestStartingEvent.TYPE, this);
-            getConnection().addHandler(ResponseHandlingStartedEvent.TYPE, this);
-            getConnection().addHandler(ResponseHandlingEndedEvent.TYPE, this);
-
-            registerRpc(OfflineModeClientRpc.class, new OfflineModeClientRpc() {
-                @Override
-                public void goOffline() {
-                    offlineEntrypoint.forceOffline(OfflineMode.ACTIVATED_BY_REQUEST);
-                }
-                @Override
-                public void goOnline() {
-                    offlineEntrypoint.forceOnline();
-                }
-            });
-        }
-    }
-
-    /**
-     * @deprecated use OfflineModeEntrypoint.get().isOnline() instead
-     */
-    @Deprecated
-    public static boolean isNetworkOnline() {
-        return offlineEntrypoint == null
-                || offlineEntrypoint.isOnline();
+    public OfflineModeConnector() {
+        super();
+        new RuntimeException().printStackTrace();
+        registerRpc(OfflineModeClientRpc.class, new OfflineModeClientRpc() {
+            @Override
+            public void goOffline() {
+                offlineEntrypoint.dispatch(FORCE_OFFLINE);
+            }
+            @Override
+            public void goOnline() {
+                offlineEntrypoint.dispatch(FORCE_ONLINE);
+            }
+        });
     }
 
     @Override
@@ -79,23 +64,36 @@ public class OfflineModeConnector extends AbstractExtensionConnector implements
 
     @Override
     protected void init() {
-        offlineModeTimeout = getState().offlineModeTimeout;
+        new RuntimeException().printStackTrace();
+        offlineEntrypoint = OfflineModeEntrypoint.get();
+        offlineEntrypoint.setOfflineModeConnector(this);
+        offlineTimeoutMillis = getState().offlineModeTimeout * 1000;
+        getConnection().addHandler(RequestStartingEvent.TYPE, this);
+        getConnection().addHandler(ResponseHandlingStartedEvent.TYPE, this);
+        getConnection().addHandler(ResponseHandlingEndedEvent.TYPE, this);
+        getConnection().addHandler(OnlineEvent.TYPE, this);
+        getConnection().addHandler(OfflineEvent.TYPE, this);
     }
 
     @Override
     public void onStateChanged(StateChangeEvent stateChangeEvent) {
         super.onStateChanged(stateChangeEvent);
-        offlineModeTimeout = getState().offlineModeTimeout;
+        offlineTimeoutMillis = getState().offlineModeTimeout * 1000;
     }
 
-    @Override
-    public void onResponseHandlingEnded(ResponseHandlingEndedEvent e) {
-        updateSessionCookieExpiration();
+    /**
+     * @deprecated use {@link OfflineModeEntrypoint.getOfflineMode}
+     */
+    public OfflineMode getOfflineApp() {
+        return OfflineModeEntrypoint.getOfflineMode();
     }
 
-    @Override
-    public void onResponseHandlingStarted(ResponseHandlingStartedEvent e) {
-        requestTimeoutTracker.cancel();
+    /**
+     * @deprecated use {@link OfflineModeEntrypoint.isNetworkOnline}
+     */
+    @Deprecated
+    public static boolean isNetworkOnline() {
+        return OfflineModeEntrypoint.isNetworkOnline();
     }
 
     @Override
@@ -110,13 +108,19 @@ public class OfflineModeConnector extends AbstractExtensionConnector implements
             Cookies.setCookie(SESSION_COOKIE, "invalidateme");
         }
 
-        if (offlineModeTimeout >= 0) {
-            requestTimeoutTracker.schedule(offlineModeTimeout * 1000);
+        if (offlineTimeoutMillis >= 0) {
+            requestTimeoutTracker.schedule(offlineTimeoutMillis);
         }
     }
 
-    public int getOfflineModeTimeout() {
-        return offlineModeTimeout;
+    @Override
+    public void onResponseHandlingStarted(ResponseHandlingStartedEvent e) {
+        requestTimeoutTracker.cancel();
+    }
+
+    @Override
+    public void onResponseHandlingEnded(ResponseHandlingEndedEvent e) {
+        updateSessionCookieExpiration();
     }
 
     private void updateSessionCookieExpiration() {
@@ -135,5 +139,24 @@ public class OfflineModeConnector extends AbstractExtensionConnector implements
 
     private String getSessionCookie() {
         return Cookies.getCookie(SESSION_COOKIE);
+    }
+    
+    public int getOfflineModeTimeout() {
+        return offlineTimeoutMillis;
+    }
+
+    @Override
+    protected void extend(ServerConnector target) {
+        // Empty implementation
+    }
+
+    @Override
+    public void onOnline(OnlineEvent ev) {
+        // Empty implementation
+    }
+
+    @Override
+    public void onOffline(OfflineEvent ev) {
+        // Empty implementation
     }
 }
