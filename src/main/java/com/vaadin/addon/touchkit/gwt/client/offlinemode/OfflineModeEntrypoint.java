@@ -14,6 +14,8 @@ import java.util.logging.Logger;
 
 import com.google.gwt.core.client.EntryPoint;
 import com.google.gwt.core.client.GWT;
+import com.google.gwt.core.client.Scheduler;
+import com.google.gwt.core.client.Scheduler.RepeatingCommand;
 import com.google.gwt.http.client.Request;
 import com.google.gwt.http.client.RequestBuilder;
 import com.google.gwt.http.client.RequestCallback;
@@ -23,6 +25,7 @@ import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.ActivationRe
 import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.OfflineEvent;
 import com.vaadin.addon.touchkit.gwt.client.offlinemode.OfflineMode.OnlineEvent;
 import com.vaadin.addon.touchkit.gwt.client.vcom.OfflineModeConnector;
+import com.vaadin.client.ApplicationConfiguration;
 import com.vaadin.client.ApplicationConnection;
 import com.vaadin.client.ApplicationConnection.CommunicationErrorHandler;
 import com.vaadin.client.ApplicationConnection.CommunicationHandler;
@@ -112,33 +115,56 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
         // We always go off-line at the beginning until we receive
         // a Vaadin online response
         dispatch(APP_STARTING);
+
+        // Loop until vaadin application connection is loaded.
+        // Normally it should be done when the OfflineModeConnector is
+        // instantiated, but there could be applications not using it
+        // in server side. It seems there is not other way to do this.
+        Scheduler.get().scheduleFixedDelay(new RepeatingCommand() {
+            int cont = 0;
+            @Override
+            public boolean execute() {
+                if (!ApplicationConfiguration.getRunningApplications().isEmpty()) {
+                    configureHandlers(ApplicationConfiguration
+                            .getRunningApplications().iterator().next());
+                }
+                return cont++ < 50 && applicationConnection == null;
+            }
+        }, 100);
     }
 
     /**
-     * Set the offlineModeConnector when the online Vaadin app starts.
+     * Set the offlineModeConnector. It's optional to use it in server side.
      */
     public void setOfflineModeConnector(OfflineModeConnector oc) {
+        logger.info("Vaadin OfflineModeConnector has been started");
         offlineModeConnector = oc;
-        applicationConnection = oc.getConnection();
-        applicationConnection.addHandler(RequestStartingEvent.TYPE, this);
-        applicationConnection.addHandler(ResponseHandlingStartedEvent.TYPE, this);
-        applicationConnection.addHandler(ResponseHandlingEndedEvent.TYPE, this);
-        applicationConnection.addHandler(ConnectionStatusEvent.TYPE, this);
-        applicationConnection.setCommunicationErrorDelegate(this);
+        configureHandlers(oc.getConnection());
+    }
 
-        // If we get the connection, it means we are online and the server
-        // is available, so we go online although we already were.
-        online = false;
-        dispatch(SERVER_AVAILABLE);
+    /*
+     * When applicationConnection is available we listen to certain handlers.
+     * This never happens if the app starts in offline-mode.
+     */
+    private void configureHandlers(ApplicationConnection conn) {
+        if (applicationConnection == null) {
+            logger.info("Vaadin online application has been started.");
+            applicationConnection = conn;
+            applicationConnection.addHandler(RequestStartingEvent.TYPE, this);
+            applicationConnection.addHandler(ResponseHandlingStartedEvent.TYPE, this);
+            applicationConnection.addHandler(ResponseHandlingEndedEvent.TYPE, this);
+            applicationConnection.addHandler(ConnectionStatusEvent.TYPE, this);
+            applicationConnection.setCommunicationErrorDelegate(this);
+        }
     }
 
     /**
-     * Receive any network event, set the appropriate flags and
-     * go Off-line or On-line in case.
+     * Receive any activation or deactivation reason, setting  the appropriate
+     * flags and going Off-line or On-line in case.
      */
     public void dispatch(ActivationReason reason) {
-        logger.info("Dispatching: " + lastReason + " -> " + reason);
         if (lastReason != reason) {
+            logger.info("Dispatching: " + lastReason + " -> " + reason);
             if (reason == NETWORK_ONLINE) {
                 if (!networkOnline) {
                     networkOnline = true;
@@ -182,7 +208,8 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
             }
         } else {
             if (applicationConnection != null) {
-                if (offlineModeConnector.getOfflineModeTimeout() > -1) {
+                if (offlineModeConnector != null
+                        && offlineModeConnector.getOfflineModeTimeout() > -1) {
                     // This parameter is configurable from server via connector
                     pingTimeout = offlineModeConnector.getOfflineModeTimeout();
                 }
@@ -218,7 +245,7 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
             lastReason = reason;
             logger.info("Network Back ONLINE (" + reason + ")");
             online = true;
-            if (offlineModeConnector != null) {
+            if (applicationConnection != null) {
                 if (offlineModeApp.isActive()) {
                     offlineModeApp.deactivate();
                 }
@@ -242,7 +269,7 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
         online = false;
         lastReason = reason;
         offlineModeApp.activate(reason);
-        if (offlineModeConnector != null) {
+        if (applicationConnection != null) {
             applicationConnection.setApplicationRunning(false);
             applicationConnection.fireEvent(new OfflineEvent(reason));
         }
@@ -280,6 +307,10 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
 
     @Override
     public void onResponseHandlingEnded(ResponseHandlingEndedEvent e) {
+        if (lastReason == APP_STARTING) {
+            online = false;
+            dispatch(SERVER_AVAILABLE);
+        }
     }
 
     @Override
@@ -359,6 +390,10 @@ public class OfflineModeEntrypoint implements EntryPoint, CommunicationHandler,
 
         // Listen to HTML5 offline-online events
         if ($wnd.navigator.onLine != undefined) {
+          // android webview sends online/offline events when actually
+          // there weren't real network changes like rotate the
+          // screen, hide the keyboard, etc. So if we have detected that
+          // cordova is available, we ignore html5 network events.
           $wnd.addEventListener("offline", function() {
             if (!hasCordovaEvents) offline();
           }, false);

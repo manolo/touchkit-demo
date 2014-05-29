@@ -1,5 +1,7 @@
 package com.vaadin.touchkit.demo;
 
+import com.vaadin.annotations.Theme;
+import com.vaadin.annotations.Widgetset;
 import com.vaadin.server.VaadinRequest;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.HorizontalLayout;
@@ -11,6 +13,8 @@ import com.vaadin.ui.UI;
  *
  */
 @SuppressWarnings("serial")
+@Widgetset("com.vaadin.touchkit.demo.gwt.DemoAppWidgetSet")
+@Theme("touchkit")
 public class DemoAppFallbackUI extends UI {
 
     @Override
